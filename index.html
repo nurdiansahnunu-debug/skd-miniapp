@@ -133,7 +133,7 @@ textarea.inp{height:auto;min-height:70px;padding:12px 14px;resize:vertical}
  * Mini App SKD Penawaran & HPP · tahap 2 (lihat data + buat penawaran)
  * © 2026 Sinergi Karya Digital
  * Halaman ini tidak menyimpan data atau kunci. Data diambil dari web app Apps Script; akses dicek
- * dari tanda tangan Telegram (initData) dan tab pengguna, sama dengan bot.
+ * dari tanda tangan Telegram (initData, atau ?t= dari tombol menu bawah) dan tab pengguna, sama dengan bot.
  * Penawaran dikirim ke bot lewat Telegram.WebApp.sendData; bot menghitung ulang HPP, lalu menampilkan
  * preview di chat. Simpan, nomor dan PDF tetap dibuat bot dengan template yang sama.
  */
@@ -178,12 +178,14 @@ function draftBaru() {
 }
 
 function muat() {
-  if (!tg || !tg.initData) {
+  // tombol menu bawah bot tidak membawa initData; bot menandatangani alamatnya (?t=...)
+  var t = (new URLSearchParams(location.search)).get('t') || '';
+  if (!tg || (!tg.initData && !t)) {
     layar('Buka dari Telegram', 'Aplikasi ini hanya bisa dibuka dari tombol "📱 Aplikasi" di menu bawah bot SKD Penawaran & HPP.');
     return;
   }
   $('app').innerHTML = '<div class="layar"><div class="putar" role="status" aria-label="Memuat"></div><p>Memuat data…</p></div>';
-  fetch(API, { method: 'POST', body: JSON.stringify({ mini: 'awal', initData: tg.initData }) })
+  fetch(API, { method: 'POST', body: JSON.stringify({ mini: 'awal', initData: tg.initData || '', t: t }) })
     .then(function (r) { return r.json(); })
     .then(function (h) {
       if (!h || !h.ok) throw new Error(h && h.error ? h.error : 'Gagal memuat data.');
