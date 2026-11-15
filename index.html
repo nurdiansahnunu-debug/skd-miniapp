@@ -309,19 +309,50 @@ function diskon() {
 
 var VIEW = {
   home: function () {
-    var pnw = D.penawaran[S.brand] || [];
-    var cust = D.customer[S.brand] || [];
-    var nilai = pnw.reduce(function (n, p) { return n + p.total; }, 0);
-    return '<h2>Halo, ' + esc(D.akun.nama) + '</h2><p class="sub">Data langsung dari Google Sheet</p>' +
-      '<div class="grid2"><div class="stat"><span>Customer</span><b>' + cust.length + '</b></div><div class="stat"><span>Nilai ' + pnw.length + ' penawaran terakhir</span><b style="font-size:17px">' + rp(nilai) + '</b></div></div>' +
-      '<div style="text-align:center;margin:-2px 0 18px"><button class="btn utama" data-act="tab" data-arg="pnw"><i>' + ic('quote', 18, 2) + '</i>Buat penawaran baru</button></div>' +
-      '<div class="card"><h3>Penawaran terakhir <small>' + pnw.length + '</small></h3>' +
+    var pnw = (D.penawaran[S.brand] || []).slice(0, 5);
+    var L = D.data && D.data.lp ? D.data.lp[S.brand] : null;
+    var h = '<h2>Halo, ' + esc(D.akun.nama) + '</h2>';
+    if (L && L.l && L.l.length) {
+      var i = Math.min(S.lpb || 0, L.l.length - 1), l = L.l[i];
+      h += '<p class="sub">Laporan ' + esc(bulanTeks(l.bulan)) + ' · ' + esc(brandAktif().nama) + '</p>' +
+        '<div class="chips" style="margin-bottom:6px">' + L.l.map(function (x, k) { return '<button class="' + (k === i ? 'on' : '') + '" data-act="lpb" data-arg="' + k + '" aria-pressed="' + (k === i) + '">' + esc(bulanTeks(x.bulan, true)) + '</button>'; }).join('') + '</div>' +
+        '<div class="grid2"><div class="stat"><span>Order lunas</span><b>' + l.order + '</b></div><div class="stat"><span>Omzet</span><b style="font-size:17px">' + rp(l.omzet) + '</b></div>' +
+        '<div class="stat"><span>Laba kotor</span><b style="font-size:17px">' + rp(l.laba) + '</b></div><div class="stat"><span>Margin</span><b>' + (l.omzet ? Math.round(l.laba / l.omzet * 100) + '%' : '–') + '</b></div></div>';
+      if (i === 0) {
+        var tg = L.tg || {}, pr = L.pr || {};
+        h += '<div class="card"><h3>Perlu ditindak</h3>' +
+          barisLp('Menunggu DP', (tg.menungguDp || [0])[0] + ' penawaran', (tg.menungguDp || [0, 0])[1], 'belum') +
+          barisLp('Siap ditagih pelunasan', (tg.siapLunas || [0])[0] + ' order', (tg.siapLunas || [0, 0])[1], 'dp') +
+          (tg.telat ? '<div class="warn" style="margin:8px 0 4px">' + tg.telat + ' order DP lewat 7 hari, pelunasan belum ditagih.</div>' : '') +
+          barisLp('Produksi', (pr.d || 0) + ' diproses · ' + (pr.s || 0) + ' siap kirim', 0, 'prod') +
+          (pr.t ? '<div class="warn" style="margin:8px 0 4px">' + pr.t + ' produksi lewat target.</div>' : '') + '</div>';
+      }
+      h += '<div style="text-align:center;margin:-2px 0 18px"><button class="btn utama" data-act="tab" data-arg="pnw"><i>' + ic('quote', 18, 2) + '</i>Buat penawaran baru</button></div>';
+      h += '<div class="card"><h3>Aktivitas ' + esc(bulanTeks(l.bulan, true)) + '</h3>' +
+        '<div class="tot"><span>Penawaran dibuat</span><span>' + l.penawaranDibuat + (l.penawaranDibuat ? ' · ' + rp(l.nilaiPenawaran) : '') + '</span></div>' +
+        '<div class="tot"><span>Invoice DP</span><span>' + l.invoiceDp + (l.invoiceDp ? ' · ' + rp(l.nilaiDp) : '') + '</span></div>' +
+        (l.order ? '<div class="tot"><span>HPP</span><span>' + rp(l.hpp) + '</span></div>' : '') +
+        (l.ongkirDitanggung ? '<div class="tot"><span>Ongkir ditanggung</span><span>' + rp(l.ongkirDitanggung) + '</span></div>' : '') + '</div>';
+      if (l.produk && l.produk.length) h += '<div class="card"><h3>Produk terlaris</h3>' + l.produk.map(function (x, k) { return '<div class="row"><div class="l"><b>' + (k + 1) + '. ' + esc(x.nama) + '</b><span>' + x.jumlah.toLocaleString('id-ID') + ' pcs</span></div><div class="r">' + rp(x.nilai) + '</div></div>'; }).join('') + '</div>';
+      if (l.customer && l.customer.length) h += '<div class="card"><h3>Customer terbesar</h3>' + l.customer.map(function (x, k) { return '<div class="row"><div class="l"><b>' + (k + 1) + '. ' + esc(x.nama) + '</b><span>' + x.jumlah + ' order</span></div><div class="r">' + rp(x.nilai) + '</div></div>'; }).join('') + '</div>';
+      if (D.akun.role === 'owner' && D.brands.length > 1) h += kartuSemuaPerusahaan(i);
+      if (D.link) h += '<div class="card"><h3>Pintasan owner</h3>' +
+        '<button class="aks" data-act="link" data-arg="kendali"><i>' + ic('hist', 20, 2) + '</i><span class="l"><b>Ruang Kendali</b><span>Grafik & laporan lengkap semua perusahaan</span></span></button>' +
+        '<button class="aks" data-act="link" data-arg="input"><i>' + ic('edit', 20, 2) + '</i><span class="l"><b>Form Input Data</b><span>Produk, harga bahan, perusahaan</span></span></button></div>';
+      h += '<p class="note">Order dihitung saat invoice pelunasan terbit. Laba kotor belum termasuk biaya operasional.' +
+        (l.orderHppKosong ? ' ' + l.orderHppKosong + ' order ada HPP kosong, laba terlihat lebih besar.' : '') +
+        (l.orderAdaTambahan ? ' ' + l.orderAdaTambahan + ' order ada sablon/bordir yang belum masuk HPP.' : '') + '</p>';
+    } else {
+      h += '<p class="sub">Data langsung dari Google Sheet</p>' +
+        '<div style="text-align:center;margin:4px 0 18px"><button class="btn utama" data-act="tab" data-arg="pnw"><i>' + ic('quote', 18, 2) + '</i>Buat penawaran baru</button></div>';
+    }
+    h += '<div class="card"><h3>Penawaran terakhir <small>' + pnw.length + '</small></h3>' +
       (pnw.length ? pnw.map(function (p) {
         var r = cariRiwayat(p.no);
         var isi = '<div class="l"><b>' + esc(p.customer) + '</b><span>' + esc(p.no) + ' · ' + tgl(p.tanggal) + '</span></div><div class="r">' + rp(p.total) + '</div>';
         return r ? '<button class="row" style="width:100%;border-left:0;border-right:0;border-top:0;background:none;text-align:left;color:inherit" data-act="rwBuka" data-arg="' + esc(r.no) + '">' + isi + '</button>' : '<div class="row">' + isi + '</div>';
-      }).join('') : '<div class="empty">Belum ada penawaran untuk perusahaan ini.</div>') + '</div>' +
-      '<p class="note">Ketuk penawaran untuk invoice, SPK, surat jalan, dan label.</p>';
+      }).join('') : '<div class="empty">Belum ada penawaran untuk perusahaan ini.</div>') + '</div>';
+    return h;
   },
 
   pnw: function () {
@@ -531,6 +562,29 @@ function kirimAksi(a) {
   try { tg.sendData(JSON.stringify({ v: 2, b: S.brand, a: a })); } catch (e) { pesan('Gagal mengirim: ' + (e && e.message || e)); }
 }
 
+/* ---------- laporan (data dari bot: rumus sama dengan /laporan di chat) ---------- */
+var NAMA_BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+function bulanTeks(b, pendek) {
+  var n = NAMA_BULAN[Number(String(b).slice(4, 6)) - 1] || '';
+  return pendek ? n.slice(0, 3) + ' ' + String(b).slice(2, 4) : n + ' ' + String(b).slice(0, 4);
+}
+function barisLp(judul, ket, nilai, filter) {
+  return '<button class="row" style="width:100%;border-left:0;border-right:0;border-top:0;background:none;text-align:left;color:inherit" data-act="keRiwayat" data-arg="' + filter + '"><div class="l"><b>' + esc(judul) + '</b><span>' + esc(ket) + '</span></div><div class="r">' + (nilai ? rp(nilai) : '') + '</div></button>';
+}
+/** Owner: perbandingan semua perusahaan untuk bulan yang dipilih. */
+function kartuSemuaPerusahaan(i) {
+  var lp = D.data.lp || {}, tot = { order: 0, omzet: 0, laba: 0 };
+  var baris = D.brands.map(function (b) {
+    var l = lp[b.kode] && lp[b.kode].l ? lp[b.kode].l[i] : null;
+    if (!l) return '';
+    tot.order += l.order; tot.omzet += l.omzet; tot.laba += l.laba;
+    return '<button class="row" style="width:100%;border-left:0;border-right:0;border-top:0;background:none;text-align:left;color:inherit" data-act="pilihLp" data-arg="' + esc(b.kode) + '"><div class="l"><b><span class="tg" style="display:inline-block;font-size:11px;color:#fff;margin-right:6px;background:' + esc(warnaBrand(b)) + '">' + esc(b.kode) + '</span>' + l.order + ' order</b><span>Margin ' + rp(l.laba) + '</span></div><div class="r">' + rp(l.omzet) + '</div></button>';
+  }).join('');
+  return '<div class="card"><h3>Semua perusahaan <small>omzet</small></h3>' + baris +
+    '<div class="tot big" style="margin-top:8px"><span>Total · ' + tot.order + ' order</span><span>' + rp(tot.omzet) + '</span></div>' +
+    '<div class="tot"><span>Laba kotor</span><span>' + rp(tot.laba) + '</span></div></div>';
+}
+
 function daftarCustomer() {
   var q = S.cq.toLowerCase();
   var list = (D.customer[S.brand] || []).filter(function (c) { return c.nama.toLowerCase().indexOf(q) > -1; });
@@ -657,6 +711,14 @@ function kirim() {
 var ACT = {
   muat: muat,
   tab: function (t) { S.tab = t; render(); $('main').scrollTop = 0; },
+  lpb: function (k) { S.lpb = Number(k) || 0; var y = $('main').scrollTop; render(); $('main').scrollTop = y; },
+  pilihLp: function (k) { if (k !== S.brand) Q.cust = draftBaru().cust; S.brand = k; S.cq = ''; S.rq = ''; render(); $('main').scrollTop = 0; },
+  keRiwayat: function (f) { S.tab = 'rw'; S.rf = f || 'semua'; S.rq = ''; render(); $('main').scrollTop = 0; },
+  link: function (k) {
+    var url = D.link && D.link[k];
+    if (!url) return;
+    try { tg.openLink(url); } catch (e) { window.open(url, '_blank'); }
+  },
   rwF: function (f) { S.rf = f; $('rwlist').innerHTML = daftarRiwayat(); document.querySelectorAll('[data-act=rwF]').forEach(function (b) { var on = b.getAttribute('data-arg') === f; b.classList.toggle('on', on); b.setAttribute('aria-pressed', on); }); },
   rwBuka: function (no) { buka(panelRiwayat(no)); },
   aksi: function (a) { kirimAksi(a); },
