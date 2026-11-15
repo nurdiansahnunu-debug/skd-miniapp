@@ -221,6 +221,18 @@ function render() {
 function hppItem(it) {
   var p = produk(it.p);
   if (!p) return 0;
+  // HPP dari bot (rumus sama dengan chat): per model|ukuran, per kain
+  var H = D.hpp && D.hpp[p.nama.replace(/\s+/g, ' ').trim().toLowerCase()];
+  if (H) {
+    var m = (it.m || '').toLowerCase(), u = (it.u || '').toLowerCase();
+    var baris = H.v[m + '|' + u] || H.v[m + '|'] || H.v['|' + u] || H.v['|'];
+    if (baris) {
+      var ki = -1, kn = (it.kn || '').toLowerCase();
+      for (var i = 0; i < H.k.length; i++) if (H.k[i].toLowerCase() === kn) ki = i;
+      if (H.k.length === 1) ki = 0;
+      return ki >= 0 ? (baris[ki] || 0) : Math.max.apply(null, baris);
+    }
+  }
   var cari = function (nama) { for (var i = 0; i < p.varian.length; i++) if (p.varian[i].nama === nama) return p.varian[i].hpp; return 0; };
   return cari(it.u) || cari(it.m) || p.varian.reduce(function (m, v) { return Math.max(m, v.hpp); }, 0);
 }
