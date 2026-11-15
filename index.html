@@ -57,6 +57,13 @@ h2{font-size:20px;font-weight:800;letter-spacing:-.01em}
 .prod .h b{font-size:15px}
 .prod .h span{font-size:12px;color:var(--mu)}
 .prod.open{box-shadow:var(--in)}
+.kats{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:16px}
+.kat{border:0;text-align:left;background:var(--bg);border-radius:18px;padding:14px;min-height:84px;box-shadow:var(--r2);display:flex;flex-direction:column;justify-content:space-between;gap:8px;color:var(--tx)}
+.kat b{font-size:14px;line-height:1.3}
+.kat span{font-size:12px;color:var(--mu)}
+.kat:active{box-shadow:var(--in)}
+.kembali{border:0;background:var(--bg);border-radius:999px;min-height:40px;padding:0 16px 0 12px;font-size:13px;font-weight:700;box-shadow:var(--r2);color:#36424F;display:inline-flex;align-items:center;gap:8px;margin-bottom:12px}
+.judul-kat{font-size:13px;color:var(--mu);margin:0 0 12px}
 .var{margin-top:12px;padding-top:12px;border-top:1px solid var(--line)}
 .var:first-of-type{margin-top:14px}
 .var .vn{display:flex;justify-content:space-between;gap:8px;font-size:13px;font-weight:700}
@@ -71,7 +78,7 @@ nav{display:grid;grid-template-columns:repeat(4,1fr);background:var(--bg);margin
 nav button{border:0;background:none;font-size:11px;color:var(--mu);display:flex;flex-direction:column;align-items:center;gap:3px;min-height:56px;justify-content:center;border-radius:18px}
 nav button i{width:52px;height:32px;border-radius:12px;display:flex;align-items:center;justify-content:center}
 nav button.on{color:var(--p);font-weight:800}
-nav button.on i{background:linear-gradient(145deg,color-mix(in srgb,var(--ba) 22%,var(--bg)),color-mix(in srgb,var(--p) 14%,var(--bg)));box-shadow:inset 2px 2px 5px var(--sd),inset -2px -2px 5px rgba(255,255,255,.7)}
+nav button.on i{background:linear-gradient(145deg,color-mix(in srgb,var(--cta) 22%,var(--bg)),color-mix(in srgb,var(--p) 14%,var(--bg)));box-shadow:inset 2px 2px 5px var(--sd),inset -2px -2px 5px rgba(255,255,255,.7)}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;min-height:52px;padding:0 22px;border:0;border-radius:18px;background:var(--bg);color:var(--p);font-weight:800;font-size:15px;box-shadow:var(--r1)}
 .btn:active{box-shadow:var(--in)}
 .btn i{width:36px;height:36px;border-radius:12px;background:linear-gradient(145deg,var(--cg),var(--cta));color:#fff;display:flex;align-items:center;justify-content:center;margin-left:-12px}
@@ -140,7 +147,7 @@ textarea.inp{height:auto;min-height:70px;padding:12px 14px;resize:vertical}
 var API = 'https://script.google.com/macros/s/AKfycbzCLdShXF0Rpa7snjQtbBF8exjqtRf7JcJfDrwpA51DCFJJZdQS3XmwNNXFmnCfPhTL/exec';
 var tg = window.Telegram && window.Telegram.WebApp;
 var D = null;
-var S = { brand: '', tab: 'home', cat: 'Semua', q: '', cq: '', buka: '' };
+var S = { brand: '', tab: 'home', cat: '', q: '', cq: '', buka: '' };
 var Q = null; // draft penawaran
 var F = null; // item yang sedang diisi di panel
 
@@ -154,6 +161,7 @@ var IC = {
   chat: '<path d="M4 5h16v11H8l-4 4z"/>',
   retry: '<path d="M4 12a8 8 0 1 0 2.3-5.6M4 4v4h4"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
+  grid: '<rect x="4" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.5"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.5"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.5"/>',
   send: '<path d="M21 3L10 14M21 3l-7 18-4-7-7-4z"/>'
 };
 function ic(k, s, w) { return '<svg width="' + (s || 22) + '" height="' + (s || 22) + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (w || 1.9) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + IC[k] + '</svg>'; }
@@ -199,12 +207,24 @@ function muat() {
     });
 }
 
+// Penanda brand (garis bawah header & titik di pilihan perusahaan). Kolom warna di tab perusahaan dipakai
+// kalau diisi; kalau kosong pakai palet ini supaya tiap brand beda. Warna tema aplikasi tetap SKD.
+var WARNA_BRAND = { JSG: '#F5A623', SKD: '#2FB36B', JTG: '#1FA7B5', TDT: '#9B6BF0', AVD: '#EC5FA0', RKD: '#FF7A1A', RFS: '#3D8BFF', JDI: '#C9A14A' };
+var WARNA_CADANGAN = ['#F5A623', '#2FB36B', '#1FA7B5', '#9B6BF0', '#EC5FA0', '#FF7A1A', '#3D8BFF', '#C9A14A'];
+function warnaBrand(b) {
+  if (!b) return '#E62A33';
+  if (/^#[0-9a-f]{6}$/i.test(b.warna || '')) return b.warna;
+  if (WARNA_BRAND[b.kode]) return WARNA_BRAND[b.kode];
+  var h = 0;
+  for (var i = 0; i < b.kode.length; i++) h = (h * 31 + b.kode.charCodeAt(i)) % 997;
+  return WARNA_CADANGAN[h % WARNA_CADANGAN.length];
+}
+
 function brandAktif() { for (var i = 0; i < D.brands.length; i++) if (D.brands[i].kode === S.brand) return D.brands[i]; return D.brands[0]; }
 
 function render() {
   var b = brandAktif();
-  document.documentElement.style.setProperty('--ba', b.warna || '#E62A33');
-  document.documentElement.style.setProperty('--bp', b.warna || '#0B2A4A');
+  document.documentElement.style.setProperty('--ba', warnaBrand(b));
   var banyak = D.brands.length > 1;
   var tabs = [['home', 'Beranda', 'home'], ['pnw', 'Penawaran', 'quote'], ['produk', 'Produk', 'box'], ['cust', 'Customer', 'user']];
   $('app').innerHTML =
@@ -314,11 +334,8 @@ var VIEW = {
   },
 
   produk: function () {
-    var cats = ['Semua'];
-    D.produk.forEach(function (p) { if (cats.indexOf(p.kategori) < 0) cats.push(p.kategori); });
     return '<h2>Produk &amp; HPP</h2><p class="sub">Harga acuan: ' + D.markup.map(function (m) { return esc(m.label) + ' +' + (m.p10 / 10) + '%'; }).join(' · ') + '</p>' +
       '<div class="search">' + ic('search', 18, 2) + '<input type="search" placeholder="Cari produk" value="' + esc(S.q) + '" data-in="q" aria-label="Cari produk"></div>' +
-      '<div class="chips">' + cats.map(function (c) { return '<button class="' + (c === S.cat ? 'on' : '') + '" data-act="cat" data-arg="' + esc(c) + '" aria-pressed="' + (c === S.cat) + '">' + esc(c) + '</button>'; }).join('') + '</div>' +
       '<div id="plist">' + daftarProduk() + '</div>';
   },
 
@@ -329,11 +346,22 @@ var VIEW = {
   }
 };
 
+/** Produk dikelompokkan per kategori: pilih kategori dulu; pencarian mencari di semua kategori. */
 function daftarProduk() {
-  var q = S.q.toLowerCase();
-  var list = D.produk.filter(function (p) { return (S.cat === 'Semua' || p.kategori === S.cat) && p.nama.toLowerCase().indexOf(q) > -1; });
-  if (!list.length) return '<div class="empty">Produk tidak ditemukan.</div>';
-  return list.map(function (p) {
+  var q = S.q.trim().toLowerCase();
+  if (!q && !S.cat) {
+    var cats = [], jml = {};
+    D.produk.forEach(function (p) { if (!jml[p.kategori]) { jml[p.kategori] = 0; cats.push(p.kategori); } jml[p.kategori]++; });
+    if (!cats.length) return '<div class="empty">Belum ada produk aktif.</div>';
+    return '<div class="kats">' + cats.map(function (c) {
+      return '<button class="kat" data-act="cat" data-arg="' + esc(c) + '"><b>' + esc(c) + '</b><span>' + jml[c] + ' produk</span></button>';
+    }).join('') + '</div>';
+  }
+  var list = D.produk.filter(function (p) { return (q ? true : p.kategori === S.cat) && p.nama.toLowerCase().indexOf(q) > -1; });
+  var atas = q ? '<p class="judul-kat">Hasil cari di semua kategori · ' + list.length + ' produk</p>'
+    : '<button class="kembali" data-act="cat" data-arg=""><i>' + ic('grid', 16, 2) + '</i>Semua kategori</button><p class="judul-kat"><b>' + esc(S.cat) + '</b> · ' + list.length + ' produk</p>';
+  if (!list.length) return atas + '<div class="empty">Produk tidak ditemukan.</div>';
+  return atas + list.map(function (p) {
     var open = S.buka === p.nama;
     var isi = '';
     if (open) {
@@ -342,9 +370,23 @@ function daftarProduk() {
           (v.hpp ? '<div class="tiers">' + D.markup.map(function (m) {
             return '<div class="tier' + (m.label === 'Aman' ? ' aman' : '') + '"><small>' + esc(m.label) + '</small><b>' + rp(hargaJual(v.hpp, m.p10)) + '</b></div>';
           }).join('') + '</div>' : '<div class="note" style="text-align:left">HPP belum lengkap di Sheet.</div>');
-      }).join('') : '<div class="var"><div class="note" style="text-align:left">Belum ada ukuran/model. Cek HPP lewat /hpp di bot.</div></div>';
+      }).join('') : hppPerKain(p);
     }
-    return '<button class="prod' + (open ? ' open' : '') + '" data-act="buka" data-arg="' + esc(p.nama) + '" aria-expanded="' + open + '"><div class="h"><div><b>' + esc(p.nama) + '</b><br><span>' + esc(p.kategori) + ' · ' + p.varian.length + ' ukuran/model</span></div>' + ic('chev', 18, 2) + '</div>' + isi + '</button>';
+    return '<button class="prod' + (open ? ' open' : '') + '" data-act="buka" data-arg="' + esc(p.nama) + '" aria-expanded="' + open + '"><div class="h"><div><b>' + esc(p.nama) + '</b><br><span>' + esc(p.kategori) + ' · ' + (p.varian.length ? p.varian.length + ' ukuran/model' : (p.kain.length || 1) + ' kain') + '</span></div>' + ic('chev', 18, 2) + '</div>' + isi + '</button>';
+  }).join('');
+}
+
+/** Produk tanpa ukuran/model: HPP per kain dari bot (rumus sama dengan chat). */
+function hppPerKain(p) {
+  var H = D.hpp && D.hpp[p.nama.replace(/\s+/g, ' ').trim().toLowerCase()];
+  var baris = H && H.v['|'];
+  if (!baris) return '<div class="var"><div class="note" style="text-align:left">HPP belum tersedia. Cek lewat /hpp di bot.</div></div>';
+  return H.k.map(function (k, i) {
+    var hpp = baris[i] || 0;
+    return '<div class="var"><div class="vn">' + esc(k || 'HPP') + '<span>HPP ' + (hpp ? rp(hpp) : '–') + '</span></div>' +
+      (hpp ? '<div class="tiers">' + D.markup.map(function (m) {
+        return '<div class="tier' + (m.label === 'Aman' ? ' aman' : '') + '"><small>' + esc(m.label) + '</small><b>' + rp(hargaJual(hpp, m.p10)) + '</b></div>';
+      }).join('') + '</div>' : '<div class="note" style="text-align:left">Harga kain ini belum diisi di Sheet.</div>');
   }).join('');
 }
 
@@ -365,7 +407,7 @@ function tutupPanel() { $('modal').classList.remove('on'); }
 function bukaBrand() {
   buka('<h3>Pilih perusahaan</h3>' + D.brands.map(function (b) {
     var on = b.kode === S.brand;
-    return '<button class="opt' + (on ? ' on' : '') + '" data-act="pilih" data-arg="' + esc(b.kode) + '"><span class="dot" style="background:' + esc(b.warna || '#0B2A4A') + '"></span><span class="l"><b>' + esc(b.nama) + '</b><span>' + esc(b.kode) + ' · ' + (D.customer[b.kode] || []).length + ' customer</span></span></button>';
+    return '<button class="opt' + (on ? ' on' : '') + '" data-act="pilih" data-arg="' + esc(b.kode) + '"><span class="dot" style="background:' + esc(warnaBrand(b)) + '"></span><span class="l"><b>' + esc(b.nama) + '</b><span>' + esc(b.kode) + ' · ' + (D.customer[b.kode] || []).length + ' customer</span></span></button>';
   }).join(''));
 }
 
@@ -469,7 +511,7 @@ function kirim() {
 var ACT = {
   muat: muat,
   tab: function (t) { S.tab = t; render(); $('main').scrollTop = 0; },
-  cat: function (c) { S.cat = c; render(); },
+  cat: function (c) { S.cat = c; S.buka = ''; render(); $('main').scrollTop = 0; },
   buka: function (n) { S.buka = S.buka === n ? '' : n; var y = $('main').scrollTop; render(); $('main').scrollTop = y; },
   brand: function () { if (D.brands.length > 1) bukaBrand(); },
   pilih: function (k) {
