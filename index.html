@@ -112,6 +112,7 @@ nav button.on i{background:linear-gradient(145deg,color-mix(in srgb,var(--cta) 2
 .sheet h3{font-size:17px;margin-bottom:14px}
 .opt{display:flex;align-items:center;gap:12px;width:100%;min-height:60px;padding:10px 14px;border:0;border-radius:18px;background:var(--bg);text-align:left;margin-bottom:12px;box-shadow:var(--r2)}
 .opt.on{box-shadow:var(--in);outline:2px solid rgba(230,42,51,.55);outline-offset:-2px}
+.opt .ico-baru{display:grid;place-items:center;width:34px;height:34px;border-radius:12px;background:linear-gradient(145deg,var(--cg),var(--cta));color:#fff;flex:none;box-shadow:0 6px 12px -6px rgba(215,34,43,.8)}
 .opt .l{flex:1}.opt .l b{display:block;font-size:14px}.opt .l span{font-size:12px;color:var(--mu)}
 .dot{width:30px;height:30px;border-radius:10px;flex:none;box-shadow:0 3px 6px rgba(0,0,0,.2)}
 .pill{min-height:44px;padding:0 16px;border-radius:999px;border:0;background:var(--bg);font-size:14px;font-weight:700;box-shadow:var(--r2);color:#36424F}
@@ -266,6 +267,15 @@ function render() {
 }
 
 /* ---------- hitung perkiraan (harga pasti dihitung bot) ---------- */
+/** Produk yang HPP-nya masih 0 di semua kain & varian (mis. produk baru dari admin). Kosong kalau data HPP belum termuat. */
+function produkTanpaHpp() {
+  if (!D.hpp || !Object.keys(D.hpp).length) return [];
+  return D.produk.filter(function (p) {
+    var H = dataHpp(p);
+    if (!H || !H.v) return true;
+    return Object.keys(H.v).every(function (k) { return H.v[k].every(function (x) { return !x[0]; }); });
+  }).map(function (p) { return p.nama; });
+}
 function dataHpp(p) { return p && D.hpp ? D.hpp[p.nama.replace(/\s+/g, ' ').trim().toLowerCase()] : null; }
 /** Nilai 1 kain: [eceran, rollan, qty minimal rollan] -> HPP untuk qty itu (aturan sama dengan bot). */
 function hppKain(x, qty) { if (!x) return 0; if (typeof x === 'number') return x; return x[2] && qty >= x[2] ? x[1] : x[0]; }
@@ -336,7 +346,9 @@ var VIEW = {
       if (l.produk && l.produk.length) h += '<div class="card"><h3>Produk terlaris</h3>' + l.produk.map(function (x, k) { return '<div class="row"><div class="l"><b>' + (k + 1) + '. ' + esc(x.nama) + '</b><span>' + x.jumlah.toLocaleString('id-ID') + ' pcs</span></div><div class="r">' + rp(x.nilai) + '</div></div>'; }).join('') + '</div>';
       if (l.customer && l.customer.length) h += '<div class="card"><h3>Customer terbesar</h3>' + l.customer.map(function (x, k) { return '<div class="row"><div class="l"><b>' + (k + 1) + '. ' + esc(x.nama) + '</b><span>' + x.jumlah + ' order</span></div><div class="r">' + rp(x.nilai) + '</div></div>'; }).join('') + '</div>';
       if (D.akun.role === 'owner' && D.brands.length > 1) h += kartuSemuaPerusahaan(i);
+      var kosong = produkTanpaHpp();
       if (D.link) h += '<div class="card"><h3>Pintasan owner</h3>' +
+        (kosong.length ? '<div class="warn" style="margin:0 0 10px">' + kosong.length + ' produk belum ada HPP: ' + esc(kosong.slice(0, 3).join(', ')) + (kosong.length > 3 ? ', +' + (kosong.length - 3) + ' lainnya' : '') + '. Isi lewat Form Input Data.</div>' : '') +
         '<button class="aks" data-act="link" data-arg="kendali"><i>' + ic('hist', 20, 2) + '</i><span class="l"><b>Ruang Kendali</b><span>Grafik & laporan lengkap semua perusahaan</span></span></button>' +
         '<button class="aks" data-act="link" data-arg="input"><i>' + ic('edit', 20, 2) + '</i><span class="l"><b>Form Input Data</b><span>Produk, harga bahan, perusahaan</span></span></button></div>';
       h += '<p class="note">Order dihitung saat invoice pelunasan terbit. Laba kotor belum termasuk biaya operasional.' +
@@ -495,7 +507,7 @@ function tagRiwayat(r) {
   var t = [];
   if (lunasDiMuka(r)) t.push(r.d ? ['ok', 'Lunas di muka'] : ['mu', 'Belum ditagih']);
   else if (r.l) t.push(['ok', 'Lunas']);
-  else if (r.d) t.push(['wait', 'DP ' + r.dpp + '% · belum lunas']);
+  else if (r.d) t.push(r.x ? ['mu', 'DP ' + r.dpp + '% · tidak lanjut'] : ['wait', 'DP ' + r.dpp + '% · belum lunas']);
   else t.push(['mu', 'Belum DP']);
   if (r.s === 'diproses') t.push(['wait', 'Produksi' + (r.dl ? ' · ' + tgl(r.dl) : '')]);
   else if (r.s === 'siap') t.push(['ok', 'Siap kirim']);
@@ -540,7 +552,9 @@ function panelRiwayat(no) {
   if (muka) h += tombolAksi('iv:d:' + r.no, 'rcpt', 'Invoice pembayaran', r.d ? r.d + ' · kirim ulang PDF' : 'Buat invoice ' + rp(r.dp), !r.d);
   else {
     h += tombolAksi('iv:d:' + r.no, 'rcpt', 'Invoice DP ' + r.dpp + '%', r.d ? r.d + ' · kirim ulang PDF' : 'Buat invoice ' + rp(r.dp), !r.d);
-    h += tombolAksi('iv:l:' + r.no, 'rcpt', 'Invoice pelunasan', r.l ? r.l + ' · kirim ulang PDF' : 'Buat invoice ' + rp(r.pl), Boolean(r.d) && !r.l);
+    // pelunasan baru muncul setelah invoice DP ada (sama dengan chat)
+    if (r.d || r.l) h += tombolAksi('iv:l:' + r.no, 'rcpt', 'Invoice pelunasan', r.l ? r.l + ' · kirim ulang PDF' : 'Buat invoice ' + rp(r.pl), Boolean(r.d) && !r.l);
+    if (r.x) h += '<p class="note" style="text-align:left;margin:4px 0 0">DP lewat 20 hari dan belum masuk produksi, order dianggap tidak lanjut. Pelunasan tetap bisa dibuat bila customer kembali.</p>';
   }
   h += '<div class="sec2">Produksi & kirim</div>' +
     tombolAksi('spk:' + r.no, 'gear', 'SPK produksi', prod, false) +
@@ -620,13 +634,19 @@ function panelCustomer() {
 function itemBaru(nama) { return { p: nama, m: '', u: '', kn: '', w: '', q: '', t: 350, h: '', j: null }; }
 
 function panelProduk() {
-  var q = (S.ppq || '').toLowerCase();
+  var ketik = (S.ppq || '').replace(/\s+/g, ' ').trim(), q = ketik.toLowerCase();
   var list = D.produk.filter(function (p) { return p.nama.toLowerCase().indexOf(q) > -1; });
+  var sama = list.some(function (p) { return p.nama.toLowerCase() === q; });
+  // produk belum ada di database: ditambahkan lewat alur produk baru di chat (owner dikabari untuk isi HPP)
+  var baru = ketik.length >= 3 && !sama
+    ? (list.length ? '' : '<div class="empty" style="padding-bottom:8px">Produk tidak ditemukan.</div>') +
+      '<button class="opt" data-act="produkBaru"><i class="ico-baru">' + ic('plus', 18, 2.2) + '</i><span class="l"><b>Produk baru: ' + esc(ketik) + '</b><span>Belum ada di daftar · lanjut di chat, HPP diisi owner</span></span></button>'
+    : '';
   return '<h3>Pilih produk</h3>' +
     '<div class="search">' + ic('search', 18, 2) + '<input type="search" placeholder="Cari produk" value="' + esc(S.ppq || '') + '" data-in="ppq" aria-label="Cari produk"></div>' +
-    '<div id="pplist">' + (list.length ? list.map(function (p) {
+    '<div id="pplist">' + list.map(function (p) {
       return '<button class="opt" data-act="pilihProduk" data-arg="' + esc(p.nama) + '"><span class="l"><b>' + esc(p.nama) + '</b><span>' + esc(p.kategori) + '</span></span></button>';
-    }).join('') : '<div class="empty">Produk tidak ditemukan.</div>') + '</div>';
+    }).join('') + (baru || (list.length ? '' : '<div class="empty">' + (ketik ? 'Produk tidak ditemukan. Ketik minimal 3 huruf untuk menambah produk baru.' : 'Belum ada produk aktif.') + '</div>')) + '</div>';
 }
 
 function panelItem() {
@@ -672,9 +692,18 @@ function seksiHarga() {
 }
 
 /* ---------- kirim ---------- */
-function kirim() {
+function custPesanan() {
   var c = Q.cust;
-  var cust = c.mode === 'lama' ? { n: c.nama, up: c.up, k: c.k, a: c.a, lama: true } : { n: c.n.trim(), up: c.up.trim(), k: c.k.trim(), a: c.a.trim() };
+  return c.mode === 'lama' ? { n: c.nama, up: c.up, k: c.k, a: c.a, lama: true } : { n: c.n.trim(), up: c.up.trim(), k: c.k.trim(), a: c.a.trim() };
+}
+function kirimData(data) {
+  var teks = JSON.stringify(data);
+  if (new Blob([teks]).size > 4000) return pesan('Penawaran terlalu panjang untuk dikirim sekaligus. Kurangi jumlah produk atau catatan.');
+  if (tg.initDataUnsafe && tg.initDataUnsafe.query_id) return pesan('Untuk mengirim penawaran, buka aplikasi dari tombol "📱 Aplikasi" di menu bawah chat bot.');
+  try { tg.sendData(teks); } catch (e) { pesan('Gagal mengirim: ' + (e && e.message || e)); }
+}
+function kirim() {
+  var cust = custPesanan();
   if (!cust.n || cust.n.length < 2) return pesan('Pilih atau isi nama customer dulu.');
   if (!cust.k) return pesan('No. WhatsApp / telepon customer wajib diisi.');
   if (!Q.items.length) return pesan('Tambahkan minimal 1 produk.');
@@ -683,6 +712,10 @@ function kirim() {
   var dp = Q.dp === 'lain' ? angka(Q.dpLain) : Q.dp;
   if (!(dp >= 1 && dp <= 100)) return pesan('Persen DP harus 1–100.');
   if ((Q.og.j === 'subsidi' || Q.og.j === 'penuh') && !angka(Q.og.n)) return pesan('Isi ongkos kirim asli.');
+  kirimData(susunPesanan(cust, lp, dp));
+}
+/** Isi penawaran di aplikasi jadi data untuk bot. Dipakai kirim biasa dan produk baru (yang kosong ditanya bot di chat). */
+function susunPesanan(cust, lp, dp) {
   var data = {
     v: 1, b: S.brand, c: cust,
     i: Q.items.map(function (it) {
@@ -702,10 +735,22 @@ function kirim() {
   if (Q.og.j) data.og = { j: Q.og.j, n: angka(Q.og.n) };
   if (Q.ct.trim()) data.ct = Q.ct.trim();
   if (Q.sk) data.sk = true;
-  var teks = JSON.stringify(data);
-  if (new Blob([teks]).size > 4000) return pesan('Penawaran terlalu panjang untuk dikirim sekaligus. Kurangi jumlah produk atau catatan.');
-  if (tg.initDataUnsafe && tg.initDataUnsafe.query_id) return pesan('Untuk mengirim penawaran, buka aplikasi dari tombol "📱 Aplikasi" di menu bawah chat bot.');
-  try { tg.sendData(teks); } catch (e) { pesan('Gagal mengirim: ' + (e && e.message || e)); }
+  return data;
+}
+/** Produk belum ada di database: isi penawaran yang sudah ada ikut dibawa, produk baru ditambahkan & dilengkapi di chat. */
+function kirimProdukBaru() {
+  var nama = (S.ppq || '').replace(/\s+/g, ' ').trim();
+  if (nama.length < 3) return pesan('Nama produk minimal 3 huruf.');
+  if (nama.length > 80) return pesan('Nama produk maksimal 80 huruf.');
+  var cust = custPesanan();
+  var lp = Q.lp === 'lain' ? Q.lpLain.trim() : Q.lp;
+  var dp = Q.dp === 'lain' ? angka(Q.dpLain) : Q.dp;
+  var data = susunPesanan(cust.n && cust.n.length >= 2 ? cust : undefined, lp || undefined, dp >= 1 && dp <= 100 ? dp : undefined);
+  data.nb = nama;
+  var lanjut = function (ok) { if (ok) kirimData(data); };
+  var teks = 'Tambah produk baru "' + nama + '"?\n\nAplikasi ditutup, lalu bot di chat menanyakan kategori, kain, jumlah, dan harga jual (manual). Owner dikabari untuk mengisi HPP.' +
+    (Q.items.length ? '\n\n' + Q.items.length + ' produk yang sudah diisi ikut dibawa.' : '');
+  try { tg.showConfirm(teks, lanjut); } catch (e) { lanjut(confirm(teks)); }
 }
 
 var ACT = {
@@ -737,6 +782,7 @@ var ACT = {
     tutupPanel(); ulang();
   },
   tambahItem: function () { S.ppq = ''; S.fIdx = -1; buka(panelProduk()); },
+  produkBaru: kirimProdukBaru,
   pilihProduk: function (n) {
     var p = produk(n); if (!p) return;
     F = itemBaru(n);
