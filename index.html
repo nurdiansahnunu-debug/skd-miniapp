@@ -238,23 +238,35 @@ function render() {
 }
 
 /* ---------- hitung perkiraan (harga pasti dihitung bot) ---------- */
-function hppItem(it) {
-  var p = produk(it.p);
-  if (!p) return 0;
-  // HPP dari bot (rumus sama dengan chat): per model|ukuran, per kain
-  var H = D.hpp && D.hpp[p.nama.replace(/\s+/g, ' ').trim().toLowerCase()];
-  if (H) {
-    var m = (it.m || '').toLowerCase(), u = (it.u || '').toLowerCase();
-    var baris = H.v[m + '|' + u] || H.v[m + '|'] || H.v['|' + u] || H.v['|'];
-    if (baris) {
-      var ki = -1, kn = (it.kn || '').toLowerCase();
-      for (var i = 0; i < H.k.length; i++) if (H.k[i].toLowerCase() === kn) ki = i;
-      if (H.k.length === 1) ki = 0;
-      return ki >= 0 ? (baris[ki] || 0) : Math.max.apply(null, baris);
-    }
-  }
-  var cari = function (nama) { for (var i = 0; i < p.varian.length; i++) if (p.varian[i].nama === nama) return p.varian[i].hpp; return 0; };
-  return cari(it.u) || cari(it.m) || p.varian.reduce(function (m, v) { return Math.max(m, v.hpp); }, 0);
+function dataHpp(p) { return p && D.hpp ? D.hpp[p.nama.replace(/\s+/g, ' ').trim().toLowerCase()] : null; }
+/** Nilai 1 kain: [eceran, rollan, qty minimal rollan] -> HPP untuk qty itu (aturan sama dengan bot). */
+function hppKain(x, qty) { if (!x) return 0; if (typeof x === 'number') return x; return x[2] && qty >= x[2] ? x[1] : x[0]; }
+/**
+ * HPP item dari bot (rumus sama dengan chat): per model|ukuran, per kain, rollan otomatis bila qty capai minimal.
+ * Kain belum dipilih: kain termahal (sama dengan bot). Hasil {hpp, x (nilai kain terpilih) }.
+ */
+function infoHpp(it) {
+  var H = dataHpp(produk(it.p));
+  if (!H) return { hpp: 0, x: null };
+  H.m = H.m || []; H.u = H.u || [];
+  var m = (it.m || '').toLowerCase(), u = (it.u || '').toLowerCase();
+  var baris = H.v[m + '|' + u] || H.v[m + '|'] || H.v['|' + u] || H.v['|'];
+  if (!baris) return { hpp: 0, x: null };
+  var qty = angka(it.q), ki = -1, kn = (it.kn || '').toLowerCase();
+  for (var i = 0; i < H.k.length; i++) if (H.k[i].toLowerCase() === kn) ki = i;
+  if (H.k.length === 1) ki = 0;
+  if (ki >= 0) return { hpp: hppKain(baris[ki], qty), x: typeof baris[ki] === 'number' ? null : baris[ki] };
+  var best = 0;
+  baris.forEach(function (x) { best = Math.max(best, hppKain(x, qty)); });
+  return { hpp: best, x: null };
+}
+function hppItem(it) { return infoHpp(it).hpp; }
+/** Keterangan HPP di form: rollan aktif / mulai qty berapa. */
+function ketHpp(it) {
+  var f = infoHpp(it), x = f.x, qty = angka(it.q);
+  if (!f.hpp) return '';
+  if (!x || !x[2] || x[1] >= x[0]) return 'HPP ' + rp(f.hpp);
+  return qty >= x[2] ? 'HPP ' + rp(f.hpp) + ' (harga Rollan)' : 'HPP ' + rp(f.hpp) + ' · Rollan ' + rp(x[1]) + ' mulai ' + x[2] + ' pcs';
 }
 function hargaItem(it) { var h = angka(it.h); if (h) return h; var hpp = hppItem(it); return hpp ? hargaJual(hpp, it.t) : 0; }
 function hargaJasaItem(it) { if (!it.j) return 0; return angka(it.j.h) || saranJasa((D.jasa[it.j.j] || {})[it.j.u] || 0); }
@@ -301,7 +313,7 @@ var VIEW = {
       var jasa = it.j ? '<br>+ ' + esc(it.j.j + ' logo ' + it.j.u.toLowerCase()) + (it.j.po ? ' · ' + esc(it.j.po) : '') + ' · ' + rp(hargaJasaItem(it)) : '';
       var hpp = hppItem(it);
       return '<div class="item"><div class="h"><span>' + esc(it.p) + '</span><span>' + rp(totalItem(it)) + '</span></div>' +
-        '<div class="m">' + (spek ? esc(spek) + '<br>' : '') + angka(it.q) + ' × ' + rp(hargaItem(it)) + (hpp ? ' · HPP ±' + rp(hpp) : '') + jasa + '</div>' +
+        '<div class="m">' + (spek ? esc(spek) + '<br>' : '') + angka(it.q) + ' × ' + rp(hargaItem(it)) + (hpp ? ' · HPP ' + rp(hpp) : '') + jasa + '</div>' +
         '<div class="a"><button class="lnk" data-act="ubahItem" data-arg="' + i + '">Ubah</button><button class="lnk del" data-act="hapusItem" data-arg="' + i + '">Hapus</button></div></div>';
     }).join('') : '';
     var ogJ = [['', 'Tanpa'], ['gratis', 'Gratis'], ['subsidi', 'Subsidi 50%'], ['penuh', 'Ditagih penuh'], ['tujuan', 'Bayar di tujuan']];
@@ -364,30 +376,40 @@ function daftarProduk() {
   return atas + list.map(function (p) {
     var open = S.buka === p.nama;
     var isi = '';
-    if (open) {
-      isi = p.varian.length ? p.varian.map(function (v) {
-        return '<div class="var"><div class="vn">' + esc(v.nama) + '<span>HPP ' + esc(v.hppTeks || '–') + '</span></div>' +
-          (v.hpp ? '<div class="tiers">' + D.markup.map(function (m) {
-            return '<div class="tier' + (m.label === 'Aman' ? ' aman' : '') + '"><small>' + esc(m.label) + '</small><b>' + rp(hargaJual(v.hpp, m.p10)) + '</b></div>';
-          }).join('') + '</div>' : '<div class="note" style="text-align:left">HPP belum lengkap di Sheet.</div>');
-      }).join('') : hppPerKain(p);
-    }
-    return '<button class="prod' + (open ? ' open' : '') + '" data-act="buka" data-arg="' + esc(p.nama) + '" aria-expanded="' + open + '"><div class="h"><div><b>' + esc(p.nama) + '</b><br><span>' + esc(p.kategori) + ' · ' + (p.varian.length ? p.varian.length + ' ukuran/model' : (p.kain.length || 1) + ' kain') + '</span></div>' + ic('chev', 18, 2) + '</div>' + isi + '</button>';
+    if (open) isi = rincianHpp(p);
+    return '<button class="prod' + (open ? ' open' : '') + '" data-act="buka" data-arg="' + esc(p.nama) + '" aria-expanded="' + open + '"><div class="h"><div><b>' + esc(p.nama) + '</b><br><span>' + esc(p.kategori) + ' · ' + (function () { var H = dataHpp(p), n = H ? (H.m || []).length + (H.u || []).length : p.varian.length; return n ? n + ' ukuran/model' : (p.kain.length || 1) + ' kain'; })() + '</span></div>' + ic('chev', 18, 2) + '</div>' + isi + '</button>';
   }).join('');
 }
 
-/** Produk tanpa ukuran/model: HPP per kain dari bot (rumus sama dengan chat). */
-function hppPerKain(p) {
-  var H = D.hpp && D.hpp[p.nama.replace(/\s+/g, ' ').trim().toLowerCase()];
-  var baris = H && H.v['|'];
-  if (!baris) return '<div class="var"><div class="note" style="text-align:left">HPP belum tersedia. Cek lewat /hpp di bot.</div></div>';
-  return H.k.map(function (k, i) {
-    var hpp = baris[i] || 0;
-    return '<div class="var"><div class="vn">' + esc(k || 'HPP') + '<span>HPP ' + (hpp ? rp(hpp) : '–') + '</span></div>' +
-      (hpp ? '<div class="tiers">' + D.markup.map(function (m) {
-        return '<div class="tier' + (m.label === 'Aman' ? ' aman' : '') + '"><small>' + esc(m.label) + '</small><b>' + rp(hargaJual(hpp, m.p10)) + '</b></div>';
-      }).join('') + '</div>' : '<div class="note" style="text-align:left">Harga kain ini belum diisi di Sheet.</div>');
-  }).join('');
+function rentangHpp(x) { if (typeof x === 'number') x = [x, x, 0]; if (!x || !x[0]) return '–'; return x[2] && x[1] < x[0] ? rp(x[1]) + ' – ' + rp(x[0]).replace('Rp', '') : rp(x[0]); }
+function tiersHpp(hpp) {
+  return '<p class="note" style="text-align:left;margin:8px 0 0">Harga jual / pcs</p><div class="tiers" style="margin-top:4px">' + D.markup.map(function (m) {
+    return '<div class="tier' + (m.label === 'Aman' ? ' aman' : '') + '"><small>' + esc(m.label) + '</small><b>' + rp(hargaJual(hpp, m.p10)) + '</b></div>';
+  }).join('') + '</div>';
+}
+/**
+ * Rincian HPP 1 produk dari bot, sama dengan /hpp di chat: per kain rentang Rollan – eceran,
+ * harga acuan jual dari HPP eceran. Varian (model / ukuran) masing-masing ditampilkan sendiri.
+ */
+function rincianHpp(p) {
+  var H = dataHpp(p);
+  if (!H || !H.v['|']) return '<div class="var"><div class="note" style="text-align:left">HPP belum tersedia. Cek lewat /hpp di bot.</div></div>';
+  var adaRollan = false;
+  var blokKain = function (baris, ringkas) {
+    return H.k.map(function (k, i) {
+      var x = typeof baris[i] === 'number' ? [baris[i], baris[i], 0] : baris[i];
+      if (x && x[2] && x[1] < x[0]) adaRollan = true;
+      var kepala = '<div class="vn">' + esc(k || 'HPP') + '<span>HPP ' + rentangHpp(x) + '</span></div>';
+      if (!x || !x[0]) return '<div class="var">' + kepala + '<div class="note" style="text-align:left">Harga kain ini belum diisi di Sheet.</div></div>';
+      if (ringkas) return '<div class="var" style="margin-top:8px;padding-top:8px">' + kepala + '<div class="note" style="text-align:left">Jual/pcs: ' + D.markup.map(function (m) { return esc(m.label) + ' ' + rp(hargaJual(x[0], m.p10)); }).join(' · ') + '</div></div>';
+      return '<div class="var">' + kepala + tiersHpp(x[0]) + '</div>';
+    }).join('');
+  };
+  var varian = (H.m || []).map(function (n) { return [n, n.toLowerCase() + '|']; }).concat((H.u || []).map(function (n) { return [n, '|' + n.toLowerCase()]; }));
+  var isi = varian.length
+    ? varian.map(function (v) { var b = H.v[v[1]]; return b ? '<div class="var"><b style="font-size:13px">' + esc(v[0]) + '</b>' + blokKain(b, true) + '</div>' : ''; }).join('')
+    : blokKain(H.v['|'], false);
+  return isi + '<p class="note" style="text-align:left;margin-top:10px">HPP: harga Rollan – eceran. Harga acuan dari HPP eceran.' + (adaRollan ? ' Rollan dipakai otomatis bila pesanan capai minimal.' : '') + '</p>';
 }
 
 function daftarCustomer() {
@@ -461,14 +483,19 @@ function panelItem() {
     (p.kain.length > 1 ? '<div class="sec">Jenis kain</div><div class="pills">' + p.kain.map(function (k) { var on = F.kn === k; return '<button class="pill' + (on ? ' on' : '') + '" data-act="fSet" data-arg="kn|' + esc(k) + '" aria-pressed="' + on + '">' + esc(k) + '</button>'; }).join('') + '</div>' : '') +
     '<label class="fld" for="fW">Warna</label><input class="inp" id="fW" data-in="fW" value="' + esc(F.w) + '" maxlength="60" placeholder="Contoh: Putih">' +
     '<label class="fld" for="fQ">Jumlah</label><input class="inp" id="fQ" data-in="fQ" value="' + esc(F.q) + '" inputmode="numeric" placeholder="Contoh: 100">' +
-    '<div class="sec">Harga jual' + (hpp ? ' · HPP ±' + rp(hpp) : '') + '</div>' +
+    '<div id="fHarga">' + seksiHarga() + '</div>' +
+    jasa +
+    '<div class="sf"><button class="btnw" data-act="simpanItem">' + (S.fIdx >= 0 ? 'Simpan perubahan' : 'Tambahkan ke penawaran') + '</button></div>';
+}
+
+function seksiHarga() {
+  var hpp = hppItem(F), ket = ketHpp(F);
+  return '<div class="sec">Harga jual / pcs</div>' + (ket ? '<p class="note" style="text-align:left;margin:-4px 0 8px">' + esc(ket) + '</p>' : '') +
     (hpp ? '<div class="tiers" style="margin-bottom:10px">' + D.markup.map(function (m) {
       var on = !angka(F.h) && F.t === m.p10;
       return '<button class="tier' + (on ? ' aman' : '') + '" style="border:0;background:' + (on ? '' : 'var(--bg)') + '" data-act="fTier" data-arg="' + m.p10 + '" aria-pressed="' + on + '"><small>' + esc(m.label) + '</small><b>' + rp(hargaJual(hpp, m.p10)) + '</b></button>';
     }).join('') + '</div>' : '<div class="info">HPP belum ada, isi harga jual manual.</div>') +
-    '<div class="money"><input class="inp" id="fH" data-in="fH" value="' + esc(F.h) + '" inputmode="numeric" placeholder="' + (hpp ? 'Harga lain sesuai kesepakatan' : 'Harga jual per satuan') + '" aria-label="Harga lain"></div>' +
-    jasa +
-    '<div class="sf"><button class="btnw" data-act="simpanItem">' + (S.fIdx >= 0 ? 'Simpan perubahan' : 'Tambahkan ke penawaran') + '</button></div>';
+    '<div class="money"><input class="inp" id="fH" data-in="fH" value="' + esc(F.h) + '" inputmode="numeric" placeholder="' + (hpp ? 'Harga lain sesuai kesepakatan' : 'Harga jual per satuan') + '" aria-label="Harga lain"></div>';
 }
 
 /* ---------- kirim ---------- */
@@ -590,7 +617,7 @@ document.addEventListener('input', function (e) {
   else if (k === 'dpLain') Q.dpLain = v;
   else if (k === 'ct') Q.ct = v;
   else if (k === 'fW') F.w = v;
-  else if (k === 'fQ') F.q = v;
+  else if (k === 'fQ') { F.q = v; if ($('fHarga')) $('fHarga').innerHTML = seksiHarga(); }
   else if (k === 'fH') {
     F.h = v;
     document.querySelectorAll('#sheet [data-act=fTier]').forEach(function (b) { var on = !angka(F.h) && F.t === +b.getAttribute('data-arg'); b.classList.toggle('aman', on); b.style.background = on ? '' : 'var(--bg)'; b.setAttribute('aria-pressed', on); });
