@@ -352,7 +352,7 @@ var VIEW = {
         '<button class="aks" data-act="link" data-arg="kendali"><i>' + ic('hist', 20, 2) + '</i><span class="l"><b>Ruang Kendali</b><span>Grafik & laporan lengkap semua perusahaan</span></span></button>' +
         '<button class="aks" data-act="link" data-arg="input"><i>' + ic('edit', 20, 2) + '</i><span class="l"><b>Form Input Data</b><span>Produk, harga bahan, perusahaan</span></span></button></div>';
       h += '<p class="note">Order dihitung saat invoice pelunasan terbit. Laba kotor belum termasuk biaya operasional.' +
-        (l.orderHppKosong ? ' ' + l.orderHppKosong + ' order ada HPP kosong, laba terlihat lebih besar.' : '') +
+        (l.orderHppKosong ? ' ' + l.orderHppKosong + ' order ada HPP kosong, laba kotor terlihat lebih besar.' : '') +
         (l.orderAdaTambahan ? ' ' + l.orderAdaTambahan + ' order ada sablon/bordir yang belum masuk HPP.' : '') + '</p>';
     } else {
       h += '<p class="sub">Data langsung dari Google Sheet</p>' +
