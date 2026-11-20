@@ -338,7 +338,7 @@ var VIEW = {
           barisLp('Produksi', (pr.d || 0) + ' diproses · ' + (pr.s || 0) + ' siap kirim', 0, 'prod') +
           (pr.t ? '<div class="warn" style="margin:8px 0 4px">' + pr.t + ' produksi lewat target.</div>' : '') + '</div>';
       }
-      h += '<div style="text-align:center;margin:-2px 0 18px"><button class="btn utama" data-act="tab" data-arg="pnw"><i>' + ic('quote', 18, 2) + '</i>Buat penawaran baru</button></div>';
+      h += '<div style="text-align:center;margin:-2px 0 18px"><button class="btn utama" data-act="tab" data-arg="pnw"><i>' + ic('quote', 18, 2) + '</i>Buat penawaran baru</button> <button class="btn utama" data-act="tab" data-arg="inv"><i>' + ic('receipt', 18, 2) + '</i>Invoice langsung</button></div>';
       h += '<div class="card"><h3>Aktivitas ' + esc(bulanTeks(l.bulan, true)) + '</h3>' +
         '<div class="tot"><span>Penawaran dibuat</span><span>' + l.penawaranDibuat + (l.penawaranDibuat ? ' · ' + rp(l.nilaiPenawaran) : '') + '</span></div>' +
         '<div class="tot"><span>Invoice DP</span><span>' + l.invoiceDp + (l.invoiceDp ? ' · ' + rp(l.nilaiDp) : '') + '</span></div>' +
@@ -357,7 +357,7 @@ var VIEW = {
         (l.orderAdaTambahan ? ' ' + l.orderAdaTambahan + ' order ada sablon/bordir yang belum masuk HPP.' : '') + '</p>';
     } else {
       h += '<p class="sub">Data langsung dari Google Sheet</p>' +
-        '<div style="text-align:center;margin:4px 0 18px"><button class="btn utama" data-act="tab" data-arg="pnw"><i>' + ic('quote', 18, 2) + '</i>Buat penawaran baru</button></div>';
+        '<div style="text-align:center;margin:4px 0 18px"><button class="btn utama" data-act="tab" data-arg="pnw"><i>' + ic('quote', 18, 2) + '</i>Buat penawaran baru</button> <button class="btn utama" data-act="tab" data-arg="inv"><i>' + ic('receipt', 18, 2) + '</i>Invoice langsung</button></div>';
     }
     h += '<div class="card"><h3>Penawaran terakhir <small>' + pnw.length + '</small></h3>' +
       (pnw.length ? pnw.map(function (p) {
@@ -398,6 +398,7 @@ var VIEW = {
     var ogJ = [['', 'Tanpa'], ['gratis', 'Gratis'], ['subsidi', 'Subsidi 50%'], ['penuh', 'Ditagih penuh'], ['tujuan', 'Bayar di tujuan']];
     var t = subtotal(), dsk = diskon();
     return '<h2>' + (Q.li ? 'Invoice langsung' : 'Penawaran baru') + '</h2><p class="sub">' + esc(brandAktif().nama) + (Q.li ? ' · deal via WA, tanpa PDF penawaran' : ' · PDF dibuat bot setelah dikirim') + '</p>' +
+      (Q.li ? '<div class="info" style="margin-bottom:12px">Setelah dikirim, bot menampilkan preview. Setelah Anda simpan, bot menyimpan order dan menawarkan <b>Invoice DP</b> atau <b>pelunasan</b> (kalau DP 100% langsung <b>Invoice pembayaran</b>). Tidak ada PDF penawaran.</div>' : '') +
       '<div class="card"><h3>Customer</h3>' +
         '<div class="pills" style="margin-bottom:12px">' + [['lama', 'Tersimpan'], ['baru', 'Customer baru']].map(function (m) { return '<button class="pill' + (c.mode === m[0] ? ' on' : '') + '" data-act="custMode" data-arg="' + m[0] + '" aria-pressed="' + (c.mode === m[0]) + '">' + m[1] + '</button>'; }).join('') + '</div>' +
         custHtml + '</div>' +
@@ -415,7 +416,7 @@ var VIEW = {
           '<button class="pill' + (Q.dp === 'lain' ? ' on' : '') + '" data-act="dp" data-arg="lain">Persen lain</button></div>' +
         (Q.dp === 'lain' ? '<input class="inp" style="margin-top:10px" data-in="dpLain" value="' + esc(Q.dpLain) + '" inputmode="numeric" placeholder="1–100" aria-label="Persen DP">' : '') +
         '<label class="fld" for="ct">Catatan (opsional)</label><textarea class="inp" id="ct" data-in="ct" maxlength="500" placeholder="Tampil di PDF">' + esc(Q.ct) + '</textarea>' +
-        '<button class="tog" data-act="sk" aria-pressed="' + Q.sk + '"><div class="l"><b>Lampiran sketsa</b><span>Halaman sketsa produk di akhir PDF</span></div><span class="sw"></span></button>' +
+        (Q.li ? '' : '<button class="tog" data-act="sk" aria-pressed="' + Q.sk + '"><div class="l"><b>Lampiran sketsa</b><span>Halaman sketsa produk di akhir PDF</span></div><span class="sw"></span></button>') +
       '</div>' +
       '<div class="card" style="box-shadow:var(--in)"><div class="tot"><span>Subtotal</span><span id="tSub">' + rp(t) + '</span></div>' +
         '<div class="tot"><span>Diskon</span><span id="tDk">' + (dsk ? '−' + rp(dsk) : '–') + '</span></div>' +
@@ -704,7 +705,7 @@ function custPesanan() {
 }
 function kirimData(data) {
   var teks = JSON.stringify(data);
-  if (new Blob([teks]).size > 4000) return pesan('Penawaran terlalu panjang untuk dikirim sekaligus. Kurangi jumlah produk atau catatan.');
+  if (new Blob([teks]).size > 4000) return pesan((Q.li ? 'Invoice' : 'Penawaran') + ' terlalu panjang untuk dikirim sekaligus. Kurangi jumlah produk atau catatan.');
   if (tg.initDataUnsafe && tg.initDataUnsafe.query_id) return pesan('Untuk mengirim penawaran, buka aplikasi dari tombol "📱 Aplikasi" di menu bawah chat bot.');
   try { tg.sendData(teks); } catch (e) { pesan('Gagal mengirim: ' + (e && e.message || e)); }
 }
@@ -740,8 +741,8 @@ function susunPesanan(cust, lp, dp) {
   if (Q.dk.mode === 'n' && angka(Q.dk.v)) data.dk = { n: angka(Q.dk.v) };
   if (Q.og.j) data.og = { j: Q.og.j, n: angka(Q.og.n) };
   if (Q.ct.trim()) data.ct = Q.ct.trim();
-  if (Q.sk) data.sk = true;
   if (Q.li) data.li = true;
+  else if (Q.sk) data.sk = true; // invoice langsung tidak membuat PDF penawaran, jadi tanpa lampiran sketsa
   return data;
 }
 /** Produk belum ada di database: isi penawaran yang sudah ada ikut dibawa, produk baru ditambahkan & dilengkapi di chat. */
