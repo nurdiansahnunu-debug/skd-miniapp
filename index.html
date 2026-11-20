@@ -285,6 +285,7 @@ function hppKain(x, qty) { if (!x) return 0; if (typeof x === 'number') return x
  * Kain belum dipilih: kain termahal (sama dengan bot). Hasil {hpp, x (nilai kain terpilih) }.
  */
 function infoHpp(it) {
+  if (it.x) return { hpp: 0, x: null }; // ukuran di luar daftar: HPP belum diketahui, harga wajib manual
   var H = dataHpp(produk(it.p));
   if (!H) return { hpp: 0, x: null };
   H.m = H.m || []; H.u = H.u || [];
@@ -658,6 +659,8 @@ function panelProduk() {
 
 function panelItem() {
   var p = produk(F.p);
+  var multi = modeBanyak(p);
+  if (multi && !F.rows) F.rows = F.u ? [{ u: F.u, q: '', h: '', x: false }] : [];
   var models = p.varian.filter(function (v) { return v.jenis === 'model'; });
   var ukuran = p.varian.filter(function (v) { return v.jenis === 'ukuran'; });
   var pills = function (daftar, kunci, wajib) {
@@ -679,13 +682,73 @@ function panelItem() {
   }
   return '<h3>' + esc(p.nama) + '</h3>' +
     (models.length ? '<div class="sec" style="margin-top:0">Model</div>' + pills(models, 'm', false) : '') +
-    (ukuran.length ? '<div class="sec">Ukuran</div>' + pills(ukuran, 'u', true) : '') +
+    (ukuran.length && !multi ? '<div class="sec">Ukuran</div>' + pills(ukuran, 'u', true) : '') +
     (p.kain.length > 1 ? '<div class="sec">Jenis kain</div><div class="pills">' + p.kain.map(function (k) { var on = F.kn === k; return '<button class="pill' + (on ? ' on' : '') + '" data-act="fSet" data-arg="kn|' + esc(k) + '" aria-pressed="' + on + '">' + esc(k) + '</button>'; }).join('') + '</div>' : '') +
     '<label class="fld" for="fW">Warna</label><input class="inp" id="fW" data-in="fW" value="' + esc(F.w) + '" maxlength="60" placeholder="Contoh: Putih">' +
-    '<label class="fld" for="fQ">Jumlah</label><input class="inp" id="fQ" data-in="fQ" value="' + esc(F.q) + '" inputmode="numeric" placeholder="Contoh: 100">' +
-    '<div id="fHarga">' + seksiHarga() + '</div>' +
+    (multi ? bagianUkuranBanyak(ukuran) :
+      '<label class="fld" for="fQ">Jumlah</label><input class="inp" id="fQ" data-in="fQ" value="' + esc(F.q) + '" inputmode="numeric" placeholder="Contoh: 100">' +
+      '<div id="fHarga">' + seksiHarga() + '</div>') +
     jasa +
-    '<div class="sf"><button class="btnw" data-act="simpanItem">' + (S.fIdx >= 0 ? 'Simpan perubahan' : 'Tambahkan ke penawaran') + '</button></div>';
+    '<div class="sf"><button class="btnw" data-act="simpanItem">' + (S.fIdx >= 0 ? 'Simpan perubahan' : 'Tambahkan ke ' + (Q.li ? 'invoice' : 'penawaran')) + '</button></div>';
+}
+
+/* ---------- 1 produk, banyak ukuran ---------- */
+/** Produk baru dengan varian ukuran: kain & warna sekali, ukuran dipilih banyak (atau diketik), tiap ukuran punya jumlah & harga sendiri. */
+function modeBanyak(p) {
+  return S.fIdx < 0 && p.varian.some(function (v) { return v.jenis === 'ukuran'; });
+}
+function itemBaris(r) {
+  var o = JSON.parse(JSON.stringify(F));
+  delete o.rows;
+  o.u = r.u; o.q = r.q; o.h = r.h; o.x = r.x ? true : false;
+  return o;
+}
+function infoBaris(i) {
+  var r = F.rows[i], it = itemBaris(r), h = hargaItem(it), hpp = hppItem(it);
+  if (r.x) return angka(r.h) ? 'Harga manual ' + rp(h) + ' / pcs' : '⚠️ Belum ada di daftar · isi harga manual';
+  if (!h) return 'Isi harga manual (HPP belum ada)';
+  return rp(h) + ' / pcs' + (hpp ? ' · HPP ' + rp(hpp) : '');
+}
+function bagianUkuranBanyak(ukuran) {
+  var rows = F.rows;
+  var pilih = ukuran.map(function (v) {
+    var on = rows.some(function (r) { return !r.x && r.u === v.nama; });
+    return '<button class="pill' + (on ? ' on' : '') + '" data-act="rToggle" data-arg="' + esc(v.nama) + '" aria-pressed="' + on + '">' + esc(v.nama) + '</button>';
+  }).join('');
+  var baris = rows.map(function (r, i) {
+    return '<div class="item" style="margin-top:10px"><div class="h"><span>' + (r.x ? '⚠️ ' : '') + esc(r.u) + '</span><button class="lnk del" data-act="rHapus" data-arg="' + i + '" aria-label="Hapus ukuran ' + esc(r.u) + '">Hapus</button></div>' +
+      '<input class="inp" style="margin-top:8px" data-in="rQ" data-idx="' + i + '" value="' + esc(r.q) + '" inputmode="numeric" placeholder="Jumlah" aria-label="Jumlah ' + esc(r.u) + '">' +
+      '<div class="money" style="margin-top:8px"><input class="inp" data-in="rH" data-idx="' + i + '" value="' + esc(r.h) + '" inputmode="numeric" placeholder="' + (r.x ? 'Harga jual (wajib)' : 'Harga lain (kosong = harga acuan)') + '" aria-label="Harga ' + esc(r.u) + '"></div>' +
+      '<div class="m" id="ri' + i + '" style="margin-top:6px">' + esc(infoBaris(i)) + '</div></div>';
+  }).join('');
+  var acuan = '<div class="sec">Harga acuan</div><div class="pills">' + D.markup.map(function (m) {
+    var on = F.t === m.p10;
+    return '<button class="pill' + (on ? ' on' : '') + '" data-act="fTier" data-arg="' + m.p10 + '" aria-pressed="' + on + '">' + esc(m.label) + ' +' + (m.p10 / 10) + '%</button>';
+  }).join('') + '</div>';
+  return '<div class="sec">Ukuran <small>' + rows.length + ' dipilih</small></div><div class="pills">' + pilih + '</div>' +
+    '<label class="fld" for="rBaru">Ukuran lain (belum ada di daftar)</label>' +
+    '<input class="inp" id="rBaru" data-in="rBaru" value="' + esc(S.rBaru || '') + '" maxlength="40" placeholder="Contoh: 85x140"><button class="lnk" data-act="rTambah" style="margin-top:8px">Tambah ukuran</button>' +
+    (rows.length ? baris + acuan : '<div class="info">Pilih satu atau lebih ukuran di atas, atau ketik ukuran lain.</div>');
+}
+
+/** Simpan semua baris ukuran jadi item terpisah (format kirim ke bot tetap sama). Semua baris dicek dulu: ada yang salah = tidak ada yang tersimpan. */
+function simpanBanyak() {
+  var rows = F.rows || [];
+  if (!rows.length) return pesan('Pilih atau ketik minimal satu ukuran.');
+  if (Q.items.length + rows.length > 20) return pesan('Maksimal 20 item. Sisa tempat: ' + (20 - Q.items.length) + '.');
+  if (F.j && !hargaJasaItem(F)) return pesan('Isi harga sablon/bordir dulu.');
+  var baru = [];
+  for (var i = 0; i < rows.length; i++) {
+    var r = rows[i], it = itemBaris(r);
+    if (!angka(r.q)) return pesan('Isi jumlah untuk ukuran ' + r.u + '.');
+    if (r.x && !angka(r.h)) return pesan('Ukuran ' + r.u + ' belum ada di daftar.\nHarga jual wajib diisi manual.');
+    if (!hargaItem(it)) return pesan('Isi harga jual untuk ukuran ' + r.u + '.');
+    var kembar = Q.items.some(function (x) { return x.p === it.p && (x.m || '') === (it.m || '') && (x.u || '') === (it.u || '') && (x.kn || '') === (it.kn || '') && (x.w || '').trim().toLowerCase() === (it.w || '').trim().toLowerCase(); });
+    if (kembar) return pesan('Ukuran ' + r.u + ' dengan model, kain, dan warna yang sama sudah ada di daftar.\nUbah lewat tombol Ubah di daftar, atau hapus ukuran ini dari pilihan.');
+    baru.push(it);
+  }
+  baru.forEach(function (it) { Q.items.push(it); });
+  F = null; tutupPanel(); ulang();
 }
 
 function seksiHarga() {
@@ -801,11 +864,28 @@ var ACT = {
   },
   ubahItem: function (i) { var it = Q.items[+i]; if (!it) return; S.fIdx = +i; F = JSON.parse(JSON.stringify(it)); buka(panelItem()); },
   hapusItem: function (i) { Q.items.splice(+i, 1); ulang(); },
+  rToggle: function (nama) {
+    var k = -1;
+    F.rows.forEach(function (r, i) { if (!r.x && r.u === nama) k = i; });
+    if (k >= 0) F.rows.splice(k, 1); else F.rows.push({ u: nama, q: '', h: '', x: false });
+    segarkanItem();
+  },
+  rTambah: function () {
+    var u = String(S.rBaru || '').replace(/\s+/g, ' ').trim();
+    if (u.length < 2) return pesan('Ketik ukuran dulu, contoh 85x140.');
+    var ada = F.rows.some(function (r) { return r.u.toLowerCase() === u.toLowerCase(); });
+    if (ada) return pesan('Ukuran ' + u + ' sudah ada di daftar.');
+    var p = produk(F.p), listed = p.varian.some(function (v) { return v.jenis === 'ukuran' && v.nama.toLowerCase() === u.toLowerCase(); });
+    F.rows.push({ u: listed ? p.varian.filter(function (v) { return v.jenis === 'ukuran' && v.nama.toLowerCase() === u.toLowerCase(); })[0].nama : u, q: '', h: '', x: !listed });
+    S.rBaru = '';
+    segarkanItem();
+  },
+  rHapus: function (i) { F.rows.splice(+i, 1); segarkanItem(); },
   /** Produk sama, ukuran lain: salin item (model, kain, warna, sablon ikut), kosongkan ukuran, jumlah, dan harga manual. */
   salinItem: function (i) {
     var it = Q.items[+i]; if (!it) return;
     F = JSON.parse(JSON.stringify(it));
-    F.q = ''; F.h = '';
+    F.q = ''; F.h = ''; delete F.x;
     var p = produk(F.p), uk = p ? p.varian.filter(function (v) { return v.jenis === 'ukuran'; }) : [];
     F.u = uk.length === 1 ? uk[0].nama : '';
     S.fIdx = -1; buka(panelItem());
@@ -816,6 +896,7 @@ var ACT = {
   jSet: function (arg) { var k = arg.split('|')[0]; F.j[k] = arg.slice(k.length + 1); if (k !== 'po') F.j.h = ''; segarkanItem(); },
   simpanItem: function () {
     var p = produk(F.p);
+    if (modeBanyak(p)) return simpanBanyak();
     if (p.varian.some(function (v) { return v.jenis === 'ukuran'; }) && !F.u) return pesan('Pilih ukuran dulu.');
     if (!angka(F.q)) return pesan('Isi jumlah dulu.');
     if (!hargaItem(F)) return pesan('Isi harga jual dulu.');
@@ -873,6 +954,14 @@ document.addEventListener('input', function (e) {
     document.querySelectorAll('#sheet [data-act=fTier]').forEach(function (b) { var on = !angka(F.h) && F.t === +b.getAttribute('data-arg'); b.classList.toggle('aman', on); b.style.background = on ? '' : 'var(--bg)'; b.setAttribute('aria-pressed', on); });
   }
   else if (k === 'jH') F.j.h = v;
+  else if (k === 'rBaru') S.rBaru = v;
+  else if (k === 'rQ' || k === 'rH') {
+    var ri = +e.target.getAttribute('data-idx');
+    if (F.rows && F.rows[ri]) {
+      F.rows[ri][k === 'rQ' ? 'q' : 'h'] = v;
+      if ($('ri' + ri)) $('ri' + ri).textContent = infoBaris(ri);
+    }
+  }
 });
 
 if (tg) {
