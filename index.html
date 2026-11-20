@@ -129,7 +129,7 @@ textarea.inp{height:auto;min-height:70px;padding:12px 14px;resize:vertical}
 .item{border-radius:18px;padding:14px;margin-bottom:12px;box-shadow:var(--in)}
 .item .h{display:flex;justify-content:space-between;gap:8px;font-size:14px;font-weight:700}
 .item .m{font-size:12px;color:var(--mu);margin:3px 0 10px;line-height:1.45}
-.item .a{display:flex;gap:8px}
+.item .a{display:flex;flex-wrap:wrap;gap:8px}
 .lnk{min-height:40px;padding:0 14px;border:0;border-radius:12px;background:var(--bg);color:var(--p);font-weight:700;font-size:13px;box-shadow:var(--r2)}
 .lnk.del{color:var(--bad)}
 .tot{display:flex;justify-content:space-between;font-size:14px;padding:4px 0;color:#36424F}
@@ -211,7 +211,7 @@ function layar(judul, isi, tombol) {
 }
 
 function draftBaru() {
-  return { cust: { mode: 'lama', nama: '', n: '', up: '', k: '', a: '' }, items: [], lp: '', lpLain: '', dk: { mode: 'none', v: '' }, og: { j: '', n: '' }, dp: 50, dpLain: '', ct: '', sk: false };
+  return { cust: { mode: 'lama', nama: '', n: '', up: '', k: '', a: '' }, items: [], lp: '', lpLain: '', dk: { mode: 'none', v: '' }, og: { j: '', n: '' }, dp: 50, dpLain: '', ct: '', sk: false, li: false };
 }
 
 function muat() {
@@ -387,11 +387,14 @@ var VIEW = {
       var hpp = hppItem(it);
       return '<div class="item"><div class="h"><span>' + esc(it.p) + '</span><span>' + rp(totalItem(it)) + '</span></div>' +
         '<div class="m">' + (spek ? esc(spek) + '<br>' : '') + angka(it.q) + ' × ' + rp(hargaItem(it)) + (hpp ? ' · HPP ' + rp(hpp) : '') + jasa + '</div>' +
-        '<div class="a"><button class="lnk" data-act="ubahItem" data-arg="' + i + '">Ubah</button><button class="lnk del" data-act="hapusItem" data-arg="' + i + '">Hapus</button></div></div>';
+        '<div class="a"><button class="lnk" data-act="ubahItem" data-arg="' + i + '">Ubah</button>' +
+        (Q.items.length < 20 ? '<button class="lnk" data-act="salinItem" data-arg="' + i + '">+ Ukuran lain</button>' : '') +
+        '<button class="lnk del" data-act="hapusItem" data-arg="' + i + '">Hapus</button></div></div>';
     }).join('') : '';
     var ogJ = [['', 'Tanpa'], ['gratis', 'Gratis'], ['subsidi', 'Subsidi 50%'], ['penuh', 'Ditagih penuh'], ['tujuan', 'Bayar di tujuan']];
     var t = subtotal(), dsk = diskon();
-    return '<h2>Penawaran baru</h2><p class="sub">' + esc(brandAktif().nama) + ' · PDF dibuat bot setelah dikirim</p>' +
+    return '<h2>' + (Q.li ? 'Invoice langsung' : 'Penawaran baru') + '</h2><p class="sub">' + esc(brandAktif().nama) + (Q.li ? ' · deal via WA, tanpa PDF penawaran' : ' · PDF dibuat bot setelah dikirim') + '</p>' +
+      '<div class="pills" style="margin-bottom:12px">' + [[false, 'Penawaran'], [true, 'Invoice langsung']].map(function (m) { return '<button class="pill' + (Q.li === m[0] ? ' on' : '') + '" data-act="jenisDok" data-arg="' + m[0] + '" aria-pressed="' + (Q.li === m[0]) + '">' + m[1] + '</button>'; }).join('') + '</div>' +
       '<div class="card"><h3>Customer</h3>' +
         '<div class="pills" style="margin-bottom:12px">' + [['lama', 'Tersimpan'], ['baru', 'Customer baru']].map(function (m) { return '<button class="pill' + (c.mode === m[0] ? ' on' : '') + '" data-act="custMode" data-arg="' + m[0] + '" aria-pressed="' + (c.mode === m[0]) + '">' + m[1] + '</button>'; }).join('') + '</div>' +
         custHtml + '</div>' +
@@ -735,6 +738,7 @@ function susunPesanan(cust, lp, dp) {
   if (Q.og.j) data.og = { j: Q.og.j, n: angka(Q.og.n) };
   if (Q.ct.trim()) data.ct = Q.ct.trim();
   if (Q.sk) data.sk = true;
+  if (Q.li) data.li = true;
   return data;
 }
 /** Produk belum ada di database: isi penawaran yang sudah ada ikut dibawa, produk baru ditambahkan & dilengkapi di chat. */
@@ -793,6 +797,16 @@ var ACT = {
   },
   ubahItem: function (i) { var it = Q.items[+i]; if (!it) return; S.fIdx = +i; F = JSON.parse(JSON.stringify(it)); buka(panelItem()); },
   hapusItem: function (i) { Q.items.splice(+i, 1); ulang(); },
+  /** Produk sama, ukuran lain: salin item (model, kain, warna, sablon ikut), kosongkan ukuran, jumlah, dan harga manual. */
+  salinItem: function (i) {
+    var it = Q.items[+i]; if (!it) return;
+    F = JSON.parse(JSON.stringify(it));
+    F.q = ''; F.h = '';
+    var p = produk(F.p), uk = p ? p.varian.filter(function (v) { return v.jenis === 'ukuran'; }) : [];
+    F.u = uk.length === 1 ? uk[0].nama : '';
+    S.fIdx = -1; buka(panelItem());
+  },
+  jenisDok: function (x) { Q.li = x === 'true'; ulang(); },
   fSet: function (arg) { var k = arg.split('|')[0], v = arg.slice(k.length + 1); F[k] = F[k] === v && k !== 'u' ? '' : v; segarkanItem(); },
   fTier: function (p10) { F.t = +p10; F.h = ''; segarkanItem(); },
   fJasa: function () { F.j = F.j ? null : { j: 'Sablon', u: 'Kecil', po: /kursi/i.test(F.p) ? 'Sandaran depan' : '', h: '' }; segarkanItem(); },
@@ -803,6 +817,8 @@ var ACT = {
     if (!angka(F.q)) return pesan('Isi jumlah dulu.');
     if (!hargaItem(F)) return pesan('Isi harga jual dulu.');
     if (F.j && !hargaJasaItem(F)) return pesan('Isi harga sablon/bordir dulu.');
+    var kembar = Q.items.some(function (x, k) { return k !== S.fIdx && x.p === F.p && (x.m || '') === (F.m || '') && (x.u || '') === (F.u || '') && (x.kn || '') === (F.kn || '') && (x.w || '').trim().toLowerCase() === (F.w || '').trim().toLowerCase(); });
+    if (kembar) return pesan('Produk dengan model, ukuran, kain, dan warna yang sama sudah ada di daftar.\nUbah jumlahnya lewat tombol Ubah, atau pilih ukuran lain.');
     if (S.fIdx >= 0) Q.items[S.fIdx] = F; else Q.items.push(F);
     F = null; tutupPanel(); ulang();
   },
